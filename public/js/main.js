@@ -17,6 +17,7 @@ createUserBtn.addEventListener("click", () => {
         socket.emit("join-user", currentUser);
         usernameContainer.style.display = 'none';
         chatContainer.style.display = 'block';
+        loadMessages(); // Load saved messages from localStorage
     }
 });
 
@@ -27,6 +28,7 @@ document.getElementById("send-message").addEventListener("click", () => {
         const recipient = activeChatWindow.getAttribute("data-recipient");
         socket.emit("chat-message", { user: currentUser, message, recipient });
         displayMessage(currentUser, message, recipient, "sent"); // Display sent message
+        saveMessage(currentUser, message, recipient, "sent"); // Save the sent message to localStorage
         messageInput.value = ""; // Clear input
     }
 });
@@ -39,6 +41,7 @@ const displayMessage = (user, message, recipient, messageType) => {
     if (chatWindow) {
         const li = document.createElement("li");
         li.textContent = `${user}: ${message}`;
+        li.setAttribute("data-message", `${user}-${message}`);  // Store unique message identifier
 
         const classes = ["p-2", "rounded", "w-fit", "max-w-xs", "my-1"];
         if (messageType === "sent") {
@@ -48,6 +51,30 @@ const displayMessage = (user, message, recipient, messageType) => {
         }
 
         li.classList.add(...classes);
+
+        // Create delete button and add long press functionality
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Delete";
+        deleteBtn.classList.add("delete-btn");
+        deleteBtn.style.display = "none"; // Initially hide the delete button
+
+        // Function to show delete button on long press
+        let pressTimer;
+        li.addEventListener("mousedown", () => {
+            pressTimer = setTimeout(() => {
+                deleteBtn.style.display = "inline-block"; // Show the delete button after 1 second
+            }, 1000);
+        });
+
+        li.addEventListener("mouseup", () => {
+            clearTimeout(pressTimer); // Cancel the long press if mouse is released
+        });
+
+        li.appendChild(deleteBtn);
+        
+        // When delete button is clicked
+        deleteBtn.addEventListener("click", () => deleteMessage(user, message, recipient, li));
+        
         chatWindow.querySelector(".messages").appendChild(li);
         chatWindow.querySelector(".messages").scrollTop = chatWindow.querySelector(".messages").scrollHeight;
     } else {
@@ -96,7 +123,33 @@ const createChatWindow = (recipient) => {
         unreadMessages[recipient] = [];
     }
 
+    // Load saved messages for this chat window from localStorage
+    loadSavedMessages(recipient);
+
     return chatWindow;
+};
+
+// Delete message from chat window and localStorage
+const deleteMessage = (user, message, recipient, messageElement) => {
+    const savedMessages = JSON.parse(localStorage.getItem(`${currentUser}-${recipient}`)) || [];
+    const updatedMessages = savedMessages.filter(msg => msg.user !== user || msg.message !== message);
+    localStorage.setItem(`${currentUser}-${recipient}`, JSON.stringify(updatedMessages));
+    messageElement.remove();
+};
+
+// Load saved messages for a user from localStorage
+const loadSavedMessages = (recipient) => {
+    const savedMessages = JSON.parse(localStorage.getItem(`${currentUser}-${recipient}`)) || [];
+    savedMessages.forEach(msg => {
+        displayMessage(msg.user, msg.message, recipient, msg.user === currentUser ? "sent" : "received");
+    });
+};
+
+// Save message to localStorage
+const saveMessage = (user, message, recipient, messageType) => {
+    const savedMessages = JSON.parse(localStorage.getItem(`${currentUser}-${recipient}`)) || [];
+    savedMessages.push({ user, message, messageType });
+    localStorage.setItem(`${currentUser}-${recipient}`, JSON.stringify(savedMessages));
 };
 
 // Receive messages from the server
@@ -104,6 +157,7 @@ socket.on("chat-message", ({ user, message, recipient }) => {
     if ((recipient === currentUser || user === currentUser)) {
         const chatPartner = user === currentUser ? recipient : user;
         displayMessage(user, message, chatPartner, user === currentUser ? "sent" : "received");
+        saveMessage(user, message, chatPartner, user === currentUser ? "sent" : "received"); // Save the message to localStorage
     }
 });
 
