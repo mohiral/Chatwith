@@ -20,34 +20,33 @@ app.get("/", (req, res) => {
 });
 
 io.on("connection", (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
-
-  // Handle user joining
-  socket.on("join-user", (username) => {
-      allusers[username] = { username, id: socket.id };
-      io.emit("joined", allusers); // Update user list for all
-  });
-
-  // Handle chat message
-  socket.on("chat-message", ({ user, message, recipient }) => {
-      if (recipient === "everyone") {
-          io.emit("chat-message", { user, message, recipient }); // Broadcast message to all users
-      } else {
-          io.to(allusers[recipient].id).emit("chat-message", { user, message, recipient }); // Send only to selected recipient
-          socket.emit("chat-message", { user, message, recipient }); // Show sender's message in their chat window
-      }
-  });
-
-  // Handle user disconnection
-  socket.on("disconnect", () => {
-      for (const user in allusers) {
-          if (allusers[user].id === socket.id) {
-              delete allusers[user];
-              break;
-          }
-      }
-      io.emit("joined", allusers); // Update user list for all
-  });
+    console.log(`Socket connected: ${socket.id}`);
+  
+    // Handle user joining
+    socket.on("join-user", (username) => {
+        allusers[username] = { username, id: socket.id };
+        io.emit("joined", allusers); // Update user list for all
+    });
+  
+    // Handle chat message
+    socket.on("chat-message", ({ user, message, recipient }) => {
+        const recipientSocket = allusers[recipient]?.id; // Find the socket ID of the recipient
+        if (recipientSocket) {
+            // Send the message only to the intended recipient
+            io.to(recipientSocket).emit("chat-message", { user, message, recipient });
+        }
+    });
+  
+    // Handle user disconnection
+    socket.on("disconnect", () => {
+        for (const user in allusers) {
+            if (allusers[user].id === socket.id) {
+                delete allusers[user];
+                break;
+            }
+        }
+        io.emit("joined", allusers); // Update user list for all
+    });
 });
 
 // Start the server
